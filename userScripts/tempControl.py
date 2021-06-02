@@ -16,7 +16,7 @@ trace_log = True
 fanset_log = True
 dry_run = False
 gpu_temp_file = './gputemp.log'
-fans_shell = '/mnt/user/projects/fanControl/fans.sh'
+fans_shell = '/mnt/user/projects/fanControl/userScripts/fans.sh'
 
 
 def shell(cmd, check=False) -> str:
