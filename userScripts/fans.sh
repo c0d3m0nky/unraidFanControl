@@ -1,12 +1,13 @@
 controlRoot=/sys/devices/platform/nct6775.656/hwmon/hwmon1/
-sysFans=(1 2 3 4 5)
-pwmSet=(1 2 3 4 5)
-commNames=("CHA1" "CPU1" "CHA2" "CPU2" "CHA3")
+sysFans=(1 2 3 4 5 6)
+pwmSet=(1 2 3 4 5 6)
+commNames=("CHA3" "CPU1" "CPU2" "CHA1" "CHA2" "CHST")
 CPU1=2
-CPU2=4
-CHA1=1
-CHA2=3
-CHA3=5
+CPU2=3
+CHA1=4
+CHA2=5
+CHA3=1
+CHST=6
 
 function SysToCommName() {
 	for i in "${!sysFans[@]}"; do 

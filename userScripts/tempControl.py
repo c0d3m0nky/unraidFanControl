@@ -141,6 +141,25 @@ def get_sys_temp(sensor: Sensor) -> int:
     return temp
 
 
+nvmerx = re.compile("temperature\s+:\s+(\d{2,}) .")
+
+
+def get_nvme_temp(sensor: Sensor) -> int:
+    temps = shell(f'nvme smart-log {sensor.id} | grep temperature')
+    temp = 0    
+
+    ms = nvmerx.search(temps)
+    
+    if ms and ms.group(1).isnumeric() :
+        temp = int(ms.group(1))
+        trace(f'{sensor.name} at {temp}')
+    else:
+        err(f'Failed to retrieve temp {sensor.name}')
+        return -1
+    
+    return temp
+
+
 curr_gpu_temp: int = 0
 curr_fan_pwms: Dict[str, Tuple[int, bool]] = None
 
@@ -148,12 +167,12 @@ config: List[Sensors] = [
     Sensors(
         'Array',
         [
-            Sensor('A3-WD500gb', '/dev/sdf', get_drive_temp, 0),
-            Sensor('A1-WD3tb', '/dev/sdc', get_drive_temp, 0),
-            Sensor('A2-SG4tb', '/dev/sdg', get_drive_temp, -4),
-            Sensor('A4-IW4tB', '/dev/sde', get_drive_temp, 0),
+            Sensor('A3-WD500gb', '/dev/sdb', get_drive_temp, 0),
+            Sensor('A1-WD3tb', '/dev/sdf', get_drive_temp, 0),
+            Sensor('A2-SG4tb', '/dev/sdc', get_drive_temp, -4),
+            Sensor('A4-IW4tB', '/dev/sdg', get_drive_temp, 0),
         ],
-        ['CHA1', 'CHA2'],
+        ['CHA1'],
         [
             Temp(32, 75), Temp(35, 127), Temp(40, 175),
             Temp(45, 225), Temp(50, 254)
@@ -162,18 +181,18 @@ config: List[Sensors] = [
     Sensors(
         'SSDs',
         [
-            Sensor('Cache', '/dev/sdb', get_drive_temp, -1),
+            Sensor('Cache', '/dev/sde', get_drive_temp, -1),
             Sensor('DB-SSD', '/dev/sdd', get_drive_temp, -1)
         ],
         ['CPU2'],
         [Temp(32, 127), Temp(35, 165), Temp(40, 225), Temp(45, 254)]
     ),
-    Sensors(
-        'GPU',
-        [Sensor('GPU', 'GPU', lambda s: curr_gpu_temp, 0)],
-        ['CHA3'],
-        [Temp(40, 127), Temp(50, 165), Temp(60, 180), Temp(70, 225), Temp(75, 254)]
-    ),
+    # Sensors(
+    #     'GPU',
+    #     [Sensor('GPU', 'GPU', lambda s: curr_gpu_temp, 0)],
+    #     ['CHA3'],
+    #     [Temp(40, 127), Temp(50, 165), Temp(60, 180), Temp(70, 225), Temp(75, 254)]
+    # ),
     Sensors(
         'CPU/MB',
         [
@@ -182,6 +201,14 @@ config: List[Sensors] = [
         ],
         ['CHA3'],
         [Temp(40, 127), Temp(50, 150), Temp(60, 180), Temp(70, 225), Temp(75, 254)]
+    ),
+    Sensors(
+        'NVME',
+        [
+            Sensor('NVME', '/dev/nvme0n1', get_nvme_temp, 0)
+        ],
+        ['CHA3'],
+        [Temp(32, 127), Temp(35, 165), Temp(40, 225), Temp(45, 254)]
     )
 ]
 
