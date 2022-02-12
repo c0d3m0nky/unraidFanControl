@@ -1,15 +1,14 @@
 from dataclasses import dataclass
 from collections.abc import Callable
 from typing import List, Any, Dict, Tuple
-from enum import Enum
 
-import os
 import subprocess
 import time
 import datetime
 import re
 import sys
-import json
+
+from unraidpy import Notify, NotifyLevel
 
 # region Infra
 
@@ -19,6 +18,7 @@ fanset_log = True
 dry_run = False
 gpu_temp_file = './gputemp.log'
 fans_shell = '/mnt/user/projects/fanControl/userScripts/fans.sh'
+notifier = Notify('./_notify.json', 'Notification', 'Fan Control - ', 'Unraid Fan Control')
 
 
 def shell(cmd, check=False) -> str:
@@ -42,47 +42,6 @@ def trace(msg) -> None:
 
 def log(msg) -> None:
     print(f'{logts()}\tLOG\t{msg}')
-
-
-class NotifyLevelEnum(Enum):
-    normal = 'normal'
-    warning = 'warning'
-    error = 'alert'
-
-
-NotifyLevel = NotifyLevelEnum  # type: typing.Union[typing.Type[NotifyLevelEnum], typing.Iterable]
-
-_notifyCachePath = './_notifyCache.json'
-_notifyCache = None
-
-
-def notify(level: NotifyLevel, subject: str, msg: str, details: str = '') -> None:
-    subject = subject or 'Notification'
-    subject += 'Fan Control - '
-    cmd = f'/usr/local/emhttp/webGui/scripts/notify -e "Unraid Fan Control" -s "{subject}" -d "{msg}" -i "{level.value}"'
-
-    if details:
-        cmd += f'-m "{details}"'
-
-    global _notifyCache
-
-    if _notifyCache is None:
-        if os.path.exists(_notifyCachePath):
-            with open(_notifyCachePath) as f:
-                _notifyCache = json.load(f)
-        else:
-            _notifyCache = {}
-
-    pauseNotify = None
-
-    if cmd in _notifyCache:
-        pauseNotify = _notifyCache[cmd]
-
-    dtnow = datetime.datetime.now().timestamp()
-
-    if not pauseNotify or pauseNotify < dtnow:
-        shell(cmd)
-        _notifyCache[cmd] = dtnow + datetime.timedelta(minutes=5).total_seconds()
 
 
 def err(msg, e=None) -> None:
@@ -141,7 +100,7 @@ def get_drive_temp(sensor: Sensor) -> int:
             temp = int(temp)
         else:
             err(f'Failed to retrieve temp for {log_name}')
-            notify(NotifyLevel.error, 'Sensor Failure', f'Failed to retrieve temp for {log_name}')
+            notifier.notify(NotifyLevel.error, 'Sensor Failure', f'Failed to retrieve temp for {log_name}')
             return -1
 
         temp_log = temp
@@ -171,7 +130,7 @@ def get_sys_temp(sensor: Sensor) -> int:
         rx = rx_mobot
     else:
         err(f'Invalid sys sensor id {sensor.id}')
-        notify(NotifyLevel.error, 'Sensor Failure', f'Invalid sys sensor id {sensor.id}')
+        notifier.notify(NotifyLevel.error, 'Sensor Failure', f'Invalid sys sensor id {sensor.id}')
         return -1
     
     ms = rx.search(temps)
@@ -181,7 +140,7 @@ def get_sys_temp(sensor: Sensor) -> int:
         trace(f'{sensor.name} at {temp}')
     else:
         err(f'Failed to retrieve temp {sensor.name}')
-        notify(NotifyLevel.error, 'Sensor Failure', f'Failed to retrieve temp {sensor.name}')
+        notifier.notify(NotifyLevel.error, 'Sensor Failure', f'Failed to retrieve temp {sensor.name}')
         return -1
     
     return temp
@@ -201,7 +160,7 @@ def get_nvme_temp(sensor: Sensor) -> int:
         trace(f'{sensor.name} at {temp}')
     else:
         err(f'Failed to retrieve temp {sensor.name}')
-        notify(NotifyLevel.error, 'Sensor Failure', f'Failed to retrieve temp {sensor.name}')
+        notifier.notify(NotifyLevel.error, 'Sensor Failure', f'Failed to retrieve temp {sensor.name}')
         return -1
     
     return temp
@@ -214,7 +173,7 @@ def get_gaming_status(sensor: Sensors) -> int:
 
         if cnt > 1:
             err('Count > 1. WTF?')
-            notify(NotifyLevel.error, 'VM Status Failure', 'Count > 1. WTF?')
+            notifier.notify(NotifyLevel.error, 'VM Status Failure', 'Count > 1. WTF?')
             return -1
         elif cnt > 0:
             trace('Omnioculars is on')
@@ -224,7 +183,7 @@ def get_gaming_status(sensor: Sensors) -> int:
             return 0
     else:
         err('Failed to retrieve VM statuses')
-        notify(NotifyLevel.error, 'VM Status Failure', 'Failed to retrieve VM statuses')
+        notifier.notify(NotifyLevel.error, 'VM Status Failure', 'Failed to retrieve VM statuses')
         return -1
 
 curr_gpu_temp: int = 0
@@ -372,7 +331,7 @@ def init_check():
 
     if chk != '1':
         err('Fans were not initialized, doing so now')
-        notify(NotifyLevel.error, 'VM Status Failure', 'Fans were not initialized, doing so now')
+        notifier.notify(NotifyLevel.error, 'VM Status Failure', 'Fans were not initialized, doing so now')
         init_fans()
 
 def set_current_pwms() -> bool:
@@ -395,7 +354,7 @@ def run():
         trace('Starting check')
         if not set_current_pwms():
             err('Failed to retrieve current fan settings')
-            notify(NotifyLevel.error, 'VM Status Failure', 'Failed to retrieve current fan settings')
+            notifier.notify(NotifyLevel.error, 'VM Status Failure', 'Failed to retrieve current fan settings')
             return
 
         fansets: List[SensorsFanSet] = list()
@@ -412,15 +371,9 @@ def run():
     except:
         errInfo = sys.exc_info()
         err(f'Fatal Exception: {errInfo}')
-        notify(NotifyLevel.error, 'Fatal Exception', errInfo[0], errInfo)
+        notifier.notify(NotifyLevel.error, 'Fatal Exception', errInfo[0], errInfo)
     finally:
-        if _notifyCache is not None:
-            # check if array is still up
-            if os.path.exists('./'):
-                # write notify cache
-                with open(_notifyCachePath, 'w', encoding='utf-8') as f:
-                    json.dump(_notifyCache, f, ensure_ascii=False, indent=4)
-
+        notifier.saveCache()
 
 
 if len(sys.argv) > 1:
